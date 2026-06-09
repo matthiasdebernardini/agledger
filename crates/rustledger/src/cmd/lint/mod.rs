@@ -32,7 +32,13 @@ pub enum LintKind {
 /// # Errors
 /// Propagates errors from the underlying lint implementation.
 pub fn run(args: &Args) -> Result<ExitCode> {
+    let mut stdout = std::io::stdout().lock();
+    run_with_writer(args, &mut stdout)
+}
+
+/// Dispatch to the requested lint, writing report output to `stdout`.
+pub fn run_with_writer<W: std::io::Write>(args: &Args, stdout: &mut W) -> Result<ExitCode> {
     match &args.lint {
-        LintKind::Transfers(t_args) => transfers::run(t_args),
+        LintKind::Transfers(t_args) => transfers::run_with_writer(t_args, stdout),
     }
 }

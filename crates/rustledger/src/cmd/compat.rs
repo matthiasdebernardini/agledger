@@ -5,6 +5,7 @@
 //! Python beancount's `bean-*` commands.
 
 use std::fs;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -69,6 +70,12 @@ fn is_rledger_wrapper(path: &Path) -> bool {
 
 /// Install bean-* compatibility wrapper scripts.
 pub fn install(prefix: Option<&Path>) -> Result<()> {
+    let mut stdout = io::stdout().lock();
+    install_with_writer(prefix, &mut stdout)
+}
+
+/// Install bean-* compatibility wrapper scripts, writing status to `stdout`.
+pub fn install_with_writer<W: Write>(prefix: Option<&Path>, stdout: &mut W) -> Result<()> {
     let dir = resolve_target_dir(prefix)?;
 
     if !dir.exists() {
@@ -103,20 +110,24 @@ pub fn install(prefix: Option<&Path>) -> Result<()> {
                 .with_context(|| format!("failed to set permissions on {}", path.display()))?;
         }
 
-        println!("  installed: {}", path.display());
+        writeln!(stdout, "  installed: {}", path.display())?;
         installed += 1;
     }
 
     if installed > 0 {
-        println!("\n{installed} wrapper(s) installed to {}", dir.display());
+        writeln!(
+            stdout,
+            "\n{installed} wrapper(s) installed to {}",
+            dir.display()
+        )?;
         // Check if the directory is on PATH
         if let Ok(path_var) = std::env::var("PATH")
             && !std::env::split_paths(&path_var).any(|p| p == dir)
         {
-            println!("  note: {} may not be on your PATH", dir.display());
+            writeln!(stdout, "  note: {} may not be on your PATH", dir.display())?;
         }
     } else {
-        println!("nothing to install (all wrappers already exist)");
+        writeln!(stdout, "nothing to install (all wrappers already exist)")?;
     }
 
     Ok(())
@@ -124,6 +135,12 @@ pub fn install(prefix: Option<&Path>) -> Result<()> {
 
 /// Uninstall bean-* compatibility wrapper scripts.
 pub fn uninstall(prefix: Option<&Path>) -> Result<()> {
+    let mut stdout = io::stdout().lock();
+    uninstall_with_writer(prefix, &mut stdout)
+}
+
+/// Uninstall bean-* compatibility wrapper scripts, writing status to `stdout`.
+pub fn uninstall_with_writer<W: Write>(prefix: Option<&Path>, stdout: &mut W) -> Result<()> {
     let dir = resolve_target_dir(prefix)?;
     let mut removed = 0;
 
@@ -142,14 +159,18 @@ pub fn uninstall(prefix: Option<&Path>) -> Result<()> {
         }
 
         fs::remove_file(&path).with_context(|| format!("failed to remove {}", path.display()))?;
-        println!("  removed: {}", path.display());
+        writeln!(stdout, "  removed: {}", path.display())?;
         removed += 1;
     }
 
     if removed > 0 {
-        println!("\n{removed} wrapper(s) removed from {}", dir.display());
+        writeln!(
+            stdout,
+            "\n{removed} wrapper(s) removed from {}",
+            dir.display()
+        )?;
     } else {
-        println!("nothing to remove");
+        writeln!(stdout, "nothing to remove")?;
     }
 
     Ok(())

@@ -49,6 +49,12 @@ pub struct Args {
 
 /// Run the format command with the given arguments.
 pub fn run(args: &Args) -> Result<ExitCode> {
+    let mut stdout = io::stdout().lock();
+    run_with_writer(args, &mut stdout)
+}
+
+/// Run the format command with formatted stdout output written to `stdout`.
+pub fn run_with_writer<W: Write>(args: &Args, stdout: &mut W) -> Result<ExitCode> {
     if args.files.is_empty() {
         anyhow::bail!("FILE is required (or set default.file in config)");
     }
@@ -66,7 +72,7 @@ pub fn run(args: &Args) -> Result<ExitCode> {
     let mut any_needs_formatting = false;
 
     for file in &args.files {
-        let result = format_file(file, args)?;
+        let result = format_file(file, args, stdout)?;
         if result == ExitCode::from(1) {
             any_needs_formatting = true;
         }
@@ -79,7 +85,7 @@ pub fn run(args: &Args) -> Result<ExitCode> {
     }
 }
 
-fn format_file(file: &PathBuf, args: &Args) -> Result<ExitCode> {
+fn format_file<W: Write>(file: &PathBuf, args: &Args, stdout: &mut W) -> Result<ExitCode> {
     if !file.exists() {
         anyhow::bail!("file not found: {}", file.display());
     }
@@ -133,7 +139,6 @@ fn format_file(file: &PathBuf, args: &Args) -> Result<ExitCode> {
         }
         Ok(ExitCode::SUCCESS)
     } else {
-        let mut stdout = io::stdout().lock();
         stdout
             .write_all(formatted.as_bytes())
             .context("failed to write to stdout")?;

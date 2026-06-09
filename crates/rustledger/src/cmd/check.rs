@@ -166,6 +166,11 @@ pub struct Args {
 /// Run the check command with the given arguments.
 pub fn run(args: &Args) -> Result<ExitCode> {
     let mut stdout = io::stdout().lock();
+    run_with_writer(args, &mut stdout)
+}
+
+/// Run the check command with output written to `stdout`.
+pub fn run_with_writer<W: Write>(args: &Args, stdout: &mut W) -> Result<ExitCode> {
     let start = std::time::Instant::now();
 
     // File is required (the --generate-completions flag is only for standalone bean-check)
@@ -351,7 +356,7 @@ pub fn run(args: &Args) -> Result<ExitCode> {
                     error_count += errors.len();
                 } else {
                     error_count +=
-                        report::report_parse_errors(errors, path, &source, &mut stdout, use_color)?;
+                        report::report_parse_errors(errors, path, &source, stdout, use_color)?;
                 }
             }
             LoadError::Io { path, source } => {
@@ -644,7 +649,7 @@ pub fn run(args: &Args) -> Result<ExitCode> {
             // offending directive (issue #901). Fall back to a one-line
             // `file:line:col: error[CODE]: message` for errors without
             // span info (e.g. plugin errors, cross-file invariants).
-            ledger_error_renderer.render(err, source_map, &mut stdout)?;
+            ledger_error_renderer.render(err, source_map, stdout)?;
         }
 
         if matches!(err.severity, rustledger_loader::ErrorSeverity::Error) {
@@ -855,7 +860,7 @@ pub fn run(args: &Args) -> Result<ExitCode> {
                 cache_note
             )?;
         }
-        report::print_summary(error_count, warning_count, &mut stdout, use_color)?;
+        report::print_summary(error_count, warning_count, stdout, use_color)?;
     }
 
     if error_count > 0 {

@@ -175,29 +175,29 @@ pub enum Conversion {
 /// Run the doctor command with the given subcommand.
 pub fn run(command: Command) -> Result<()> {
     let mut stdout = io::stdout().lock();
+    run_with_writer(command, &mut stdout)
+}
 
+/// Run the doctor command with output written to `stdout`.
+pub fn run_with_writer<W: io::Write>(command: Command, stdout: &mut W) -> Result<()> {
     match command {
-        Command::Lex { file } => lex::cmd_lex(&file, &mut stdout),
-        Command::Parse { file, verbose } => parse::cmd_parse(&file, verbose, &mut stdout),
-        Command::Context { file, line } => context::cmd_context(&file, line, &mut stdout),
-        Command::Linked { file, location } => linked::cmd_linked(&file, &location, &mut stdout),
-        Command::MissingOpen { file } => missing_open::cmd_missing_open(&file, &mut stdout),
-        Command::ListOptions => options::cmd_list_options(&mut stdout),
-        Command::PrintOptions { file } => options::cmd_print_options(&file, &mut stdout),
-        Command::Stats { file } => stats::cmd_stats(&file, &mut stdout),
-        Command::DisplayContext { file } => {
-            display_context::cmd_display_context(&file, &mut stdout)
-        }
-        Command::Roundtrip { file } => roundtrip::cmd_roundtrip(&file, &mut stdout),
-        Command::Directories { file, dirs } => {
-            directories::cmd_directories(&file, &dirs, &mut stdout)
-        }
+        Command::Lex { file } => lex::cmd_lex(&file, stdout),
+        Command::Parse { file, verbose } => parse::cmd_parse(&file, verbose, stdout),
+        Command::Context { file, line } => context::cmd_context(&file, line, stdout),
+        Command::Linked { file, location } => linked::cmd_linked(&file, &location, stdout),
+        Command::MissingOpen { file } => missing_open::cmd_missing_open(&file, stdout),
+        Command::ListOptions => options::cmd_list_options(stdout),
+        Command::PrintOptions { file } => options::cmd_print_options(&file, stdout),
+        Command::Stats { file } => stats::cmd_stats(&file, stdout),
+        Command::DisplayContext { file } => display_context::cmd_display_context(&file, stdout),
+        Command::Roundtrip { file } => roundtrip::cmd_roundtrip(&file, stdout),
+        Command::Directories { file, dirs } => directories::cmd_directories(&file, &dirs, stdout),
         Command::Region {
             file,
             start_line,
             end_line,
             conversion,
-        } => region::cmd_region(&file, start_line, end_line, conversion, &mut stdout),
+        } => region::cmd_region(&file, start_line, end_line, conversion, stdout),
         Command::GenerateSynthetic {
             output,
             count,
@@ -212,7 +212,7 @@ pub fn run(command: Command) -> Result<()> {
             skip_validation,
             manifest,
             edge_cases_only,
-            &mut stdout,
+            stdout,
         ),
     }
 }

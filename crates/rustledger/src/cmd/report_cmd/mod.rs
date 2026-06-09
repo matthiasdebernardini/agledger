@@ -38,7 +38,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use rustledger_core::NaiveDate;
 use rustledger_loader::{LoadOptions, load};
-use std::io;
+use std::io::{self, Write};
 use std::path::PathBuf;
 /// Generate reports from beancount files.
 #[derive(Parser, Debug)]
@@ -205,21 +205,72 @@ pub fn run(
     };
 
     // Generate the requested report
+    run_report(report, &directives, file, format, &mut writer)?;
+
+    writer.finish();
+    Ok(())
+}
+
+/// Run the report command with output written to `writer`.
+pub fn run_with_writer<W: Write>(
+    file: &PathBuf,
+    report: &Report,
+    verbose: bool,
+    format: &OutputFormat,
+    writer: &mut W,
+) -> Result<()> {
+    // Check if file exists
+    if !file.exists() {
+        anyhow::bail!("file not found: {}", file.display());
+    }
+
+    // Load and fully process the file (parse → book → plugins)
+    if verbose {
+        eprintln!("Loading {}...", file.display());
+    }
+
+    let options = LoadOptions {
+        validate: false, // Reports don't need validation
+        ..Default::default()
+    };
+
+    let ledger =
+        load(file, &options).with_context(|| format!("failed to load {}", file.display()))?;
+
+    // Report any errors
+    for err in &ledger.errors {
+        eprintln!("{}: {}", err.code, err.message);
+    }
+
+    // Extract directives (already booked and plugins applied)
+    let directives: Vec<_> = ledger.directives.into_iter().map(|s| s.value).collect();
+
+    run_report(report, &directives, file, format, writer)?;
+    Ok(())
+}
+
+fn run_report<W: Write>(
+    report: &Report,
+    directives: &[rustledger_core::Directive],
+    file: &PathBuf,
+    format: &OutputFormat,
+    writer: &mut W,
+) -> Result<()> {
     match report {
         Report::Balances { account } => {
-            balances::report_balances(&directives, account.as_deref(), format, &mut writer)?;
+            balances::report_balances(directives, account.as_deref(), format, writer)?;
         }
         Report::Balsheet => {
-            balsheet::report_balsheet(&directives, format, &mut writer)?;
+            balsheet::report_balsheet(directives, format, writer)?;
         }
         Report::Income => {
-            income::report_income(&directives, format, &mut writer)?;
+            income::report_income(directives, format, writer)?;
         }
         Report::Journal { account, limit } => {
-            journal::report_journal(&directives, account.as_deref(), *limit, format, &mut writer)?;
+            journal::report_journal(directives, account.as_deref(), *limit, format, writer)?;
         }
         Report::Holdings { account } => {
-            holdings::report_holdings(&directives, account.as_deref(), format, &mut writer)?;
+            holdings::report_holdings(directives, account.as_deref(), format, writer)?;
         }
         Report::Networth {
             period,
@@ -228,30 +279,29 @@ pub fn run(
             no_zero,
         } => {
             networth::report_networth(
-                &directives,
+                directives,
                 period,
                 currency.as_deref(),
                 account.as_deref(),
                 *no_zero,
                 format,
-                &mut writer,
+                writer,
             )?;
         }
         Report::Accounts => {
-            accounts::report_accounts(&directives, format, &mut writer)?;
+            accounts::report_accounts(directives, format, writer)?;
         }
         Report::Commodities => {
-            commodities::report_commodities(&directives, format, &mut writer)?;
+            commodities::report_commodities(directives, format, writer)?;
         }
         Report::Stats => {
-            stats::report_stats(&directives, file, &mut writer)?;
+            stats::report_stats(directives, file, writer)?;
         }
         Report::Prices { commodity } => {
-            prices::report_prices(&directives, commodity.as_deref(), format, &mut writer)?;
+            prices::report_prices(directives, commodity.as_deref(), format, writer)?;
         }
     }
 
-    writer.finish();
     Ok(())
 }
 

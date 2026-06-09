@@ -42,6 +42,29 @@ pub fn rledger_binary() -> Option<PathBuf> {
     None
 }
 
+/// Find the agledger binary, checking `CARGO_BIN_EXE`, release, and debug paths.
+pub fn agledger_binary() -> Option<PathBuf> {
+    // Use CARGO_BIN_EXE_agledger if available (set by cargo test)
+    if let Ok(path) = std::env::var("CARGO_BIN_EXE_agledger") {
+        return Some(PathBuf::from(path));
+    }
+
+    // Check target/release first (for --release builds)
+    let release_path = project_root().join("target/release/agledger");
+    if release_path.exists() {
+        return Some(release_path);
+    }
+
+    // Fall back to target/debug
+    let debug_path = project_root().join("target/debug/agledger");
+    if debug_path.exists() {
+        return Some(debug_path);
+    }
+
+    // Binary not found (Nix builds, not yet built, etc.)
+    None
+}
+
 /// Skip tests when rledger binary is not available.
 ///
 /// Requires `mod common;` to be declared in the test file.
@@ -52,6 +75,22 @@ macro_rules! require_rledger {
             Some(path) => path,
             None => {
                 eprintln!("Skipping: rledger binary not found");
+                return;
+            }
+        }
+    };
+}
+
+/// Skip tests when agledger binary is not available.
+///
+/// Requires `mod common;` to be declared in the test file.
+#[macro_export]
+macro_rules! require_agledger {
+    () => {
+        match common::agledger_binary() {
+            Some(path) => path,
+            None => {
+                eprintln!("Skipping: agledger binary not found");
                 return;
             }
         }

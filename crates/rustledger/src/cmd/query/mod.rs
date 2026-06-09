@@ -21,7 +21,7 @@ use rustledger_booking::expand_pads;
 use rustledger_core::DisplayContext;
 use rustledger_loader::{LoadOptions, load};
 use std::fs;
-use std::io;
+use std::io::{self, Write};
 use std::path::PathBuf;
 /// System tables available in BQL queries (prefixed with #).
 const SYSTEM_TABLES: &[&str] = &[
@@ -52,15 +52,15 @@ pub struct Args {
 
     /// BQL query to execute (if not provided, enters interactive mode)
     #[arg(value_name = "QUERY", trailing_var_arg = true, num_args = 0..)]
-    query: Vec<String>,
+    pub query: Vec<String>,
 
     /// Read query from file
     #[arg(short = 'F', long = "query-file", value_name = "QUERY_FILE")]
-    query_file: Option<PathBuf>,
+    pub query_file: Option<PathBuf>,
 
     /// Output file (default: stdout)
     #[arg(short = 'o', long, value_name = "OUTPUT_FILE")]
-    output: Option<PathBuf>,
+    pub output: Option<PathBuf>,
 
     /// Output format (text, csv, json, beancount)
     #[arg(short = 'f', long)]
@@ -68,15 +68,15 @@ pub struct Args {
 
     /// Numberify output (remove currencies, output raw numbers)
     #[arg(short = 'm', long)]
-    numberify: bool,
+    pub numberify: bool,
 
     /// Do not report ledger validation errors on load
     #[arg(short = 'q', long = "no-errors")]
-    no_errors: bool,
+    pub no_errors: bool,
 
     /// Show verbose output
     #[arg(short, long)]
-    verbose: bool,
+    pub verbose: bool,
 }
 
 /// Output format for query results.
@@ -105,6 +105,12 @@ impl std::fmt::Display for OutputFormat {
 
 /// Run the query command with the given arguments.
 pub fn run(args: &Args) -> Result<()> {
+    let mut stdout = io::stdout();
+    run_with_writer(args, &mut stdout)
+}
+
+/// Run the query command with batch output written to `writer`.
+pub fn run_with_writer<W: Write>(args: &Args, writer: &mut W) -> Result<()> {
     // File is required (the --generate-completions flag is only for standalone bean-query)
     let Some(file) = args.file.as_ref() else {
         anyhow::bail!("FILE is required");
@@ -166,7 +172,7 @@ pub fn run(args: &Args) -> Result<()> {
             .with_context(|| format!("failed to create output file {}", output_path.display()))?;
         output::execute_query(&query_str, &directives, &settings, &mut file)
     } else {
-        output::execute_query(&query_str, &directives, &settings, &mut io::stdout())
+        output::execute_query(&query_str, &directives, &settings, writer)
     }
 }
 

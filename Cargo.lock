@@ -38,6 +38,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "agcli"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f34f911d03a6410891d5da1623b7077d2a6521c000588245bad39902ff3652cb"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "ahash"
 version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3842,6 +3853,7 @@ dependencies = [
 name = "rustledger"
 version = "0.15.0"
 dependencies = [
+ "agcli",
  "anyhow",
  "clap",
  "clap_complete",
@@ -3871,6 +3883,7 @@ dependencies = [
  "sha2 0.11.0",
  "shell-words",
  "tempfile",
+ "tokio",
  "toml 1.1.2+spec-1.1.0",
  "ureq",
  "wat",
@@ -4828,7 +4841,19 @@ dependencies = [
  "mio",
  "pin-project-lite",
  "socket2",
+ "tokio-macros",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "tokio-macros"
+version = "2.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "385a6cb71ab9ab790c5fe8d67f1645e6c450a7ce006a33de03daa956cf70a496"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
 ]
 
 [[package]]

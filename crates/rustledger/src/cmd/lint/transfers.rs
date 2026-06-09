@@ -19,6 +19,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::str::FromStr;
@@ -78,6 +79,12 @@ pub struct Args {
 /// - Fails if any input file does not exist or cannot be parsed.
 /// - Fails if `--apply` is set and a file edit can't be written.
 pub fn run(args: &Args) -> Result<ExitCode> {
+    let mut stdout = std::io::stdout().lock();
+    run_with_writer(args, &mut stdout)
+}
+
+/// Run the lint, writing report output to `stdout`.
+pub fn run_with_writer<W: Write>(args: &Args, stdout: &mut W) -> Result<ExitCode> {
     let tolerance = Decimal::from_str(&args.amount_tolerance)
         .with_context(|| format!("invalid --amount-tolerance: {}", args.amount_tolerance))?;
     let config = TransferConfig {
@@ -127,8 +134,8 @@ pub fn run(args: &Args) -> Result<ExitCode> {
     }
 
     match args.format {
-        OutputFormat::Text => print_text_report(&matches, args.apply)?,
-        OutputFormat::Json => print_json_report(&matches, args.apply)?,
+        OutputFormat::Text => print_text_report(&matches, args.apply, stdout)?,
+        OutputFormat::Json => print_json_report(&matches, args.apply, stdout)?,
     }
 
     Ok(ExitCode::SUCCESS)
@@ -288,8 +295,11 @@ struct JsonReport<'a> {
     applied: bool,
 }
 
-fn print_json_report(matches: &[TransferMatch], applied: bool) -> Result<()> {
-    use std::io::Write;
+fn print_json_report<W: Write>(
+    matches: &[TransferMatch],
+    applied: bool,
+    stdout: &mut W,
+) -> Result<()> {
     let report = JsonReport {
         matches: matches
             .iter()
@@ -313,18 +323,16 @@ fn print_json_report(matches: &[TransferMatch], applied: bool) -> Result<()> {
             .collect(),
         applied,
     };
-    let stdout = std::io::stdout();
-    let mut handle = stdout.lock();
-    serde_json::to_writer_pretty(&mut handle, &report).context("write JSON report")?;
-    writeln!(handle).ok();
+    serde_json::to_writer_pretty(&mut *stdout, &report).context("write JSON report")?;
+    writeln!(stdout).ok();
     Ok(())
 }
 
-fn print_text_report(matches: &[TransferMatch], applied: bool) -> Result<()> {
-    use std::io::Write;
-    let stdout = std::io::stdout();
-    let mut out = stdout.lock();
-
+fn print_text_report<W: Write>(
+    matches: &[TransferMatch],
+    applied: bool,
+    out: &mut W,
+) -> Result<()> {
     if matches.is_empty() {
         writeln!(out, "No transfer pairs detected.").ok();
         return Ok(());

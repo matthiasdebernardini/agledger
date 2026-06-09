@@ -197,6 +197,16 @@ fn canonical_format_directive(directive: &Directive, config: &FormatConfig) -> R
 
 /// Run the add command in quick mode.
 fn run_quick_mode(args: &Args, file: &PathBuf, date: NaiveDate) -> Result<()> {
+    let mut stdout = std::io::stdout().lock();
+    run_quick_mode_with_writer(args, file, date, &mut stdout)
+}
+
+fn run_quick_mode_with_writer<W: Write>(
+    args: &Args,
+    file: &PathBuf,
+    date: NaiveDate,
+    stdout: &mut W,
+) -> Result<()> {
     let quick_args = args.quick.as_ref().expect("quick mode args");
 
     if quick_args.len() < 4 {
@@ -298,23 +308,23 @@ fn run_quick_mode(args: &Args, file: &PathBuf, date: NaiveDate) -> Result<()> {
     let formatted = canonical_format_directive(&directive, &config)?;
 
     if args.dry_run {
-        println!("{formatted}");
+        writeln!(stdout, "{formatted}")?;
         return Ok(());
     }
 
     // Show preview and confirm
     if !args.yes {
-        println!("Preview:");
-        println!("{formatted}");
-        print!("Append to {}? [Y/n] ", file.display());
-        std::io::stdout().flush()?;
+        writeln!(stdout, "Preview:")?;
+        writeln!(stdout, "{formatted}")?;
+        write!(stdout, "Append to {}? [Y/n] ", file.display())?;
+        stdout.flush()?;
 
         let mut response = String::new();
         std::io::stdin().read_line(&mut response)?;
         let response = response.trim().to_lowercase();
 
         if !response.is_empty() && response != "y" && response != "yes" {
-            println!("Cancelled.");
+            writeln!(stdout, "Cancelled.")?;
             return Ok(());
         }
     }
@@ -322,7 +332,7 @@ fn run_quick_mode(args: &Args, file: &PathBuf, date: NaiveDate) -> Result<()> {
     // Append to file
     append_transaction(file, &formatted)?;
 
-    println!("Transaction appended to {}", file.display());
+    writeln!(stdout, "Transaction appended to {}", file.display())?;
     Ok(())
 }
 
@@ -659,6 +669,36 @@ pub fn run(args: &Args, file: &PathBuf) -> Result<()> {
     } else {
         run_interactive_mode(args, file, date)
     }
+}
+
+/// Run the add command in quick mode with output written to `stdout`.
+pub fn run_quick_with_writer<W: Write>(args: &Args, file: &PathBuf, stdout: &mut W) -> Result<()> {
+    let date = if let Some(ref d) = args.date {
+        parse_date(d)?
+    } else {
+        jiff::Zoned::now().date()
+    };
+
+    if args.quick.is_none() {
+        bail!("agledger add requires --quick; use rledger add for interactive mode");
+    }
+
+    if !file.exists() && !args.dry_run {
+        if !args.yes {
+            bail!(
+                "File does not exist: {}. Pass --yes to create it or create it first.",
+                file.display()
+            );
+        }
+        if let Some(parent) = file.parent()
+            && !parent.exists()
+        {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("Failed to create directory: {}", parent.display()))?;
+        }
+    }
+
+    run_quick_mode_with_writer(args, file, date, stdout)
 }
 
 #[cfg(test)]

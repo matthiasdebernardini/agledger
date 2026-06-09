@@ -67,65 +67,72 @@ pub enum ConfigCommand {
 
 /// Run the config command.
 pub fn run(args: &Args) -> Result<()> {
+    let mut stdout = io::stdout().lock();
+    run_with_writer(args, &mut stdout)
+}
+
+/// Run the config command with output written to `stdout`.
+pub fn run_with_writer<W: Write>(args: &Args, stdout: &mut W) -> Result<()> {
     match &args.command {
-        ConfigCommand::Show { raw, format } => run_show(*raw, format),
-        ConfigCommand::Path => run_path(),
-        ConfigCommand::Edit { project, system } => run_edit(*project, *system),
-        ConfigCommand::Init { project, force } => run_init(*project, *force),
-        ConfigCommand::Aliases => run_aliases(),
+        ConfigCommand::Show { raw, format } => run_show(*raw, format, stdout),
+        ConfigCommand::Path => run_path(stdout),
+        ConfigCommand::Edit { project, system } => run_edit(*project, *system, stdout),
+        ConfigCommand::Init { project, force } => run_init(*project, *force, stdout),
+        ConfigCommand::Aliases => run_aliases(stdout),
     }
 }
 
 /// Show merged configuration.
-fn run_show(raw: bool, format: &str) -> Result<()> {
+fn run_show<W: Write>(raw: bool, format: &str, stdout: &mut W) -> Result<()> {
     let loaded = Config::load()?;
 
     if raw {
         // Show each config source separately, highest precedence first
-        println!("# Configuration sources (highest precedence first)\n");
+        writeln!(
+            stdout,
+            "# Configuration sources (highest precedence first)\n"
+        )?;
 
         for source in loaded.sources.iter().rev() {
             match source {
                 config::ConfigSource::Project(path)
                 | config::ConfigSource::User(path)
                 | config::ConfigSource::System(path) => {
-                    println!("# === {source} ===");
+                    writeln!(stdout, "# === {source} ===")?;
                     if let Ok(content) = fs::read_to_string(path) {
-                        println!("{content}");
+                        writeln!(stdout, "{content}")?;
                     }
-                    println!();
+                    writeln!(stdout)?;
                 }
                 config::ConfigSource::Environment => {
-                    println!("# === Environment Variables ===");
+                    writeln!(stdout, "# === Environment Variables ===")?;
                     if let Ok(file) = std::env::var("RLEDGER_FILE") {
-                        println!("RLEDGER_FILE={file}");
+                        writeln!(stdout, "RLEDGER_FILE={file}")?;
                     }
                     if let Ok(format) = std::env::var("RLEDGER_FORMAT") {
-                        println!("RLEDGER_FORMAT={format}");
+                        writeln!(stdout, "RLEDGER_FORMAT={format}")?;
                     }
                     if std::env::var("NO_COLOR").is_ok() {
-                        println!("NO_COLOR=1");
+                        writeln!(stdout, "NO_COLOR=1")?;
                     }
                     if let Ok(profile) = std::env::var("RLEDGER_PROFILE") {
-                        println!("RLEDGER_PROFILE={profile}");
+                        writeln!(stdout, "RLEDGER_PROFILE={profile}")?;
                     }
-                    println!();
+                    writeln!(stdout)?;
                 }
                 _ => {}
             }
         }
     } else {
         // Show merged config
-        print_config(&loaded, format)?;
+        print_config(&loaded, format, stdout)?;
     }
 
     Ok(())
 }
 
 /// Print configuration in the specified format.
-fn print_config(loaded: &LoadedConfig, format: &str) -> Result<()> {
-    let mut stdout = io::stdout().lock();
-
+fn print_config<W: Write>(loaded: &LoadedConfig, format: &str, stdout: &mut W) -> Result<()> {
     match format {
         "toml" => {
             writeln!(stdout, "# Merged configuration (highest priority wins)")?;
@@ -171,28 +178,28 @@ fn format_sources(sources: &[config::ConfigSource]) -> String {
 }
 
 /// Show config file search paths.
-fn run_path() -> Result<()> {
+fn run_path<W: Write>(stdout: &mut W) -> Result<()> {
     let paths = config::config_search_paths();
 
-    println!("Configuration file search paths:\n");
+    writeln!(stdout, "Configuration file search paths:\n")?;
 
     for (level, path, exists) in paths {
         let status = if exists { "(found)" } else { "(not found)" };
-        println!("  {level:8} {status:12} {}", path.display());
+        writeln!(stdout, "  {level:8} {status:12} {}", path.display())?;
     }
 
-    println!();
-    println!("Environment variables:");
-    println!("  RLEDGER_FILE     Default beancount file");
-    println!("  RLEDGER_FORMAT   Output format (text, csv, json)");
-    println!("  RLEDGER_PROFILE  Active profile name");
-    println!("  NO_COLOR         Disable colored output");
+    writeln!(stdout)?;
+    writeln!(stdout, "Environment variables:")?;
+    writeln!(stdout, "  RLEDGER_FILE     Default beancount file")?;
+    writeln!(stdout, "  RLEDGER_FORMAT   Output format (text, csv, json)")?;
+    writeln!(stdout, "  RLEDGER_PROFILE  Active profile name")?;
+    writeln!(stdout, "  NO_COLOR         Disable colored output")?;
 
     Ok(())
 }
 
 /// Open config file in editor.
-fn run_edit(project: bool, system: bool) -> Result<()> {
+fn run_edit<W: Write>(project: bool, system: bool, stdout: &mut W) -> Result<()> {
     let path = if system {
         config::system_config_path().context("System config path not available on this platform")?
     } else if project {
@@ -215,7 +222,7 @@ fn run_edit(project: bool, system: bool) -> Result<()> {
     if !path.exists() {
         fs::write(&path, Config::default_config_content())
             .with_context(|| format!("Failed to create config file: {}", path.display()))?;
-        println!("Created new config file: {}", path.display());
+        writeln!(stdout, "Created new config file: {}", path.display())?;
     }
 
     // Check if user has a custom editor configured (treat empty/whitespace as unset)
@@ -227,7 +234,7 @@ fn run_edit(project: bool, system: bool) -> Result<()> {
             if trimmed.is_empty() { None } else { Some(e) }
         });
 
-    println!("Opening {}...", path.display());
+    writeln!(stdout, "Opening {}...", path.display())?;
 
     if let Some(editor) = custom_editor {
         // User has a custom editor configured - use Command directly
@@ -263,7 +270,7 @@ fn run_edit(project: bool, system: bool) -> Result<()> {
 }
 
 /// Generate a default config file.
-fn run_init(project: bool, force: bool) -> Result<()> {
+fn run_init<W: Write>(project: bool, force: bool, stdout: &mut W) -> Result<()> {
     let path = if project {
         std::env::current_dir()?.join(".rledger.toml")
     } else {
@@ -290,43 +297,44 @@ fn run_init(project: bool, force: bool) -> Result<()> {
     fs::write(&path, Config::default_config_content())
         .with_context(|| format!("Failed to write config file: {}", path.display()))?;
 
-    println!("Created config file: {}", path.display());
-    println!();
-    println!("Edit this file to set your default beancount file:");
-    println!(
+    writeln!(stdout, "Created config file: {}", path.display())?;
+    writeln!(stdout)?;
+    writeln!(stdout, "Edit this file to set your default beancount file:")?;
+    writeln!(
+        stdout,
         "  rledger config edit{}",
         if project { " --project" } else { "" }
-    );
+    )?;
 
     Ok(())
 }
 
 /// List configured aliases.
-fn run_aliases() -> Result<()> {
+fn run_aliases<W: Write>(stdout: &mut W) -> Result<()> {
     let loaded = Config::load()?;
 
     if loaded.config.aliases.is_empty() {
-        println!("No aliases configured.");
-        println!();
-        println!("Add aliases to your config file:");
-        println!("  [aliases]");
-        println!("  bal = \"report balances\"");
-        println!("  inc = \"report income\"");
+        writeln!(stdout, "No aliases configured.")?;
+        writeln!(stdout)?;
+        writeln!(stdout, "Add aliases to your config file:")?;
+        writeln!(stdout, "  [aliases]")?;
+        writeln!(stdout, "  bal = \"report balances\"")?;
+        writeln!(stdout, "  inc = \"report income\"")?;
         return Ok(());
     }
 
-    println!("Configured aliases:\n");
+    writeln!(stdout, "Configured aliases:\n")?;
 
     // Sort aliases by name for consistent output
     let mut aliases: Vec<_> = loaded.config.aliases.iter().collect();
     aliases.sort_by_key(|(name, _)| *name);
 
     for (name, expansion) in aliases {
-        println!("  {name} = \"{expansion}\"");
+        writeln!(stdout, "  {name} = \"{expansion}\"")?;
     }
 
-    println!();
-    println!("Usage: rledger <alias> [additional args]");
+    writeln!(stdout)?;
+    writeln!(stdout, "Usage: rledger <alias> [additional args]")?;
 
     Ok(())
 }
